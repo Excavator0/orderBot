@@ -70,6 +70,10 @@ def make_move_print_keyboard():
     builder = InlineKeyboardBuilder()
 
     builder.add(InlineKeyboardButton(
+        text="Центрировать",
+        callback_data="move_centre"
+    ))
+    builder.add(InlineKeyboardButton(
         text="Вверх",
         callback_data="move_up"
     ))
@@ -85,15 +89,12 @@ def make_move_print_keyboard():
         text="Вниз",
         callback_data="move_down"
     ))
-    builder.add(InlineKeyboardButton(
-        text="Центрировать",
-        callback_data="move_centre"
-    ))
+
     builder.add(InlineKeyboardButton(
         text="Назад",
         callback_data="settings"
     ))
-    builder.adjust(1, 2, 1, 2)
+    builder.adjust(1, 1, 2, 1, 1)
 
     return builder
 

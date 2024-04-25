@@ -126,7 +126,6 @@ def json_to_image(arr):
     return Image.fromarray(numpy.array(json.loads(arr), dtype='uint8'))
 
 
-def print_remove_bg(image, user_id):
+def print_remove_bg(image):
     img = rembg.remove(image)
-    img.save(f"prints/{user_id}.png", "PNG")
     return img

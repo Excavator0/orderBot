@@ -1,13 +1,18 @@
+import os
+import time
+
 from aiogram import Router, F
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.types import Message, CallbackQuery, InputMediaPhoto
-from keyboards.print_processing_keyboards import *
-from keyboards.confirmation_keyboards import *
-from keyboards.order_keyboards import *
+
 import keyboards.order_keyboards
 from image_processing import *
+from keyboards.confirmation_keyboards import *
+from keyboards.order_keyboards import *
+from keyboards.print_processing_keyboards import *
 
 router = Router()
 order_types = {"Футболка": "shirt", "Свитшот": "sweat", "Худи": "hoodie", "Кружка": "cup", "Кепка": "cap"}
@@ -36,6 +41,16 @@ class Order(StatesGroup):
 
 @router.message(Command("start"))
 async def cmd_start(message: Message, state: FSMContext):
+
+    path = "prints/"
+    now = time.time()
+
+    for filename in os.listdir(path):
+        filestamp = os.stat(os.path.join(path, filename)).st_mtime
+        seven_days_ago = now - 7 * 86400
+        if filestamp < seven_days_ago:
+            os.remove(f"{path}/{filename}")
+
     chat_id = message.chat.id
     await message.answer(
         text='<b>Привет!</b>\nДобро пожаловать в бота по заказу принтов!\n\n'
@@ -156,36 +171,36 @@ async def remove_print_bg(callback: CallbackQuery, state: FSMContext):
     if bg_deleted[side]:
         await callback.answer("Фон уже удален!")
     else:
-        print(bg_deleted)
-        bg_deleted = [True, True]
+        bg_deleted[side] = True
         await state.update_data({"bg_deleted": bg_deleted})
         image = image.resize(tuple(size[side]), Image.Resampling.BICUBIC)
-        image = print_remove_bg(image, user_id)
+        image = print_remove_bg(image)
+        image.save(f"prints/{user_id}_bg_deleted.png", "PNG")
         template = paste(image, color, print_pos[side], item, side, angle[side], True)
         file = image_to_bytes(template)
         file = InputMediaPhoto(media=file)
-        await callback.message.edit_media(file, reply_markup=make_settings_keyboard().as_markup())
+        await callback.message.edit_media(file, reply_markup=make_remove_bg_keyboard().as_markup())
 
 
-# @router.callback_query(F.data == "restore_bg")
-# async def restore_print_bg(callback: CallbackQuery, state: FSMContext):
-#     data = await state.get_data()
-#     user_id = callback.from_user.id
-#     image = Image.open(f"prints/{user_id}.png")
-#     item = data["order_type"]
-#     color = data["color"]
-#     side = data["side"]
-#     print_pos = data["pos"]
-#     angle = data["angle"]
-#     size = data["size"]
-#     bg_deleted = data["bg_deleted"]
-#     bg_deleted[side] = False
-#     await state.update_data({"bg_deleted": bg_deleted})
-#     image = image.resize(tuple(size[side]), Image.Resampling.BICUBIC)
-#     template = paste(image, color, print_pos[side], item, side, angle[side], False)
-#     file = image_to_bytes(template)
-#     file = InputMediaPhoto(media=file)
-#     await callback.message.edit_media(file, reply_markup=make_settings_keyboard().as_markup())
+@router.callback_query(F.data == "restore_bg")
+async def restore_print_bg(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    user_id = callback.from_user.id
+    image = Image.open(f"prints/{user_id}.png")
+    item = data["order_type"]
+    color = data["color"]
+    side = data["side"]
+    print_pos = data["pos"]
+    angle = data["angle"]
+    size = data["size"]
+    bg_deleted = data["bg_deleted"]
+    bg_deleted[side] = False
+    await state.update_data({"bg_deleted": bg_deleted})
+    image = image.resize(tuple(size[side]), Image.Resampling.BICUBIC)
+    template = paste(image, color, print_pos[side], item, side, angle[side], False)
+    file = image_to_bytes(template)
+    file = InputMediaPhoto(media=file)
+    await callback.message.edit_media(file, reply_markup=make_settings_keyboard().as_markup())
 
 
 @router.callback_query(F.data == "change_size")
@@ -197,12 +212,15 @@ async def print_size_main(callback: CallbackQuery):
 async def print_size(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     user_id = callback.from_user.id
-    image = Image.open(f"prints/{user_id}.png")
+    bg_deleted = data["bg_deleted"]
+    side = data["side"]
+    if bg_deleted[side]:
+        image = Image.open(f"prints/{user_id}_bg_deleted.png")
+    else:
+        image = Image.open(f"prints/{user_id}.png")
     item = data["order_type"]
     color = data["color"]
-    side = data["side"]
     print_pos = data["pos"]
-    bg_deleted = data["bg_deleted"]
     angle = data["angle"]
     size = data["size"]
     x_size = size[side][0]
@@ -242,12 +260,15 @@ async def move_print_main(callback: CallbackQuery):
 async def move_print(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     user_id = callback.from_user.id
-    image = Image.open(f"prints/{user_id}.png")
+    bg_deleted = data["bg_deleted"]
+    side = data["side"]
+    if bg_deleted[side]:
+        image = Image.open(f"prints/{user_id}_bg_deleted.png")
+    else:
+        image = Image.open(f"prints/{user_id}.png")
     item = data["order_type"]
     color = data["color"]
-    side = data["side"]
     print_pos = data["pos"]
-    bg_deleted = data["bg_deleted"]
     angle = data["angle"]
     size = data["size"]
     pos_changed = False
@@ -290,7 +311,10 @@ async def move_print(callback: CallbackQuery, state: FSMContext):
         file = image_to_bytes(template)
         await state.update_data({"pos": print_pos})
         file = InputMediaPhoto(media=file)
-        await callback.message.edit_media(file, reply_markup=make_move_print_keyboard().as_markup())
+        try:
+            await callback.message.edit_media(file, reply_markup=make_move_print_keyboard().as_markup())
+        except TelegramBadRequest:
+            await callback.answer("Изображение находится в центре")
 
 
 @router.callback_query(F.data == "rotate_print")
@@ -302,12 +326,15 @@ async def rotate_print_main(callback: CallbackQuery):
 async def rotate_print(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     user_id = callback.from_user.id
-    image = Image.open(f"prints/{user_id}.png")
+    bg_deleted = data["bg_deleted"]
+    side = data["side"]
+    if bg_deleted[side]:
+        image = Image.open(f"prints/{user_id}_bg_deleted.png")
+    else:
+        image = Image.open(f"prints/{user_id}.png")
     item = data["order_type"]
     color = data["color"]
-    side = data["side"]
     print_pos = data["pos"]
-    bg_deleted = data["bg_deleted"]
     angle = data["angle"]
     size = data["size"]
     if callback.data == "rotate_right":
@@ -323,27 +350,25 @@ async def rotate_print(callback: CallbackQuery, state: FSMContext):
 
 
 @router.callback_query(F.data == "change_side")
-async def change_side_main(callback: CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    side = data["side"]
-    await callback.message.edit_reply_markup(reply_markup=make_side_keyboard(side).as_markup())
-
-
-@router.callback_query(F.data.in_({"side_back", "side_front"}))
 async def change_side(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     user_id = callback.from_user.id
-    image = Image.open(f"prints/{user_id}.png")
+    bg_deleted = data["bg_deleted"]
+    side = data["side"]
+
     item = data["order_type"]
     color = data["color"]
     print_pos = data["pos"]
-    bg_deleted = data["bg_deleted"]
     angle = data["angle"]
     size = data["size"]
-    if callback.data == "side_back":
+    if side == 0:
         side = 1
     else:
         side = 0
+    if bg_deleted[side]:
+        image = Image.open(f"prints/{user_id}_bg_deleted.png")
+    else:
+        image = Image.open(f"prints/{user_id}.png")
     if print_pos[side][0] == -1:
         print_pos[side] = [(template_sizes.get(item)[0] - image.size[0]) // 2,
                            (template_sizes.get(item)[1] - image.size[1]) // 2]
@@ -355,7 +380,7 @@ async def change_side(callback: CallbackQuery, state: FSMContext):
     file = image_to_bytes(template)
     file = InputMediaPhoto(media=file)
     await state.update_data({"pos": print_pos, "side": side, "bg_deleted": bg_deleted, "angle": angle, "size": size})
-    await callback.message.edit_media(file, reply_markup=make_side_keyboard(side).as_markup())
+    await callback.message.edit_media(file, reply_markup=make_settings_keyboard().as_markup())
 
 
 @router.callback_query(F.data == "delete_print")
@@ -382,11 +407,11 @@ async def delete_print(callback: CallbackQuery, state: FSMContext):
 async def confirm_print(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     user_id = callback.from_user.id
-    image = Image.open(f"prints/{user_id}.png")
+    bg_deleted = data["bg_deleted"]
+    side = data["side"]
     item = data["order_type"]
     color = data["color"]
     print_pos = data["pos"]
-    bg_deleted = data["bg_deleted"]
     angle = data["angle"]
     size = data["size"]
     size_order = data["order_size"]
@@ -406,6 +431,10 @@ async def confirm_print(callback: CallbackQuery, state: FSMContext):
             else:
                 await callback.answer("Пока недоступно")
                 return
+    if bg_deleted[0]:
+        image = Image.open(f"prints/{user_id}_bg_deleted.png")
+    else:
+        image = Image.open(f"prints/{user_id}.png")
     image1 = image.resize(tuple(size[0]), Image.Resampling.BICUBIC)
     front = paste(image1, color, print_pos[0], item, 0, angle[0], bg_deleted[0])
     file1 = image_to_bytes(front)
@@ -414,6 +443,10 @@ async def confirm_print(callback: CallbackQuery, state: FSMContext):
     if print_pos[1][0] == -1:
         print_pos[1] = "deleted"
 
+    if bg_deleted[1]:
+        image = Image.open(f"prints/{user_id}_bg_deleted.png")
+    else:
+        image = Image.open(f"prints/{user_id}.png")
     image2 = image.resize(tuple(size[1]), Image.Resampling.BICUBIC)
     back = paste(image2, color, print_pos[1], item, 1, angle[1], bg_deleted[1])
     file2 = image_to_bytes(back)
@@ -512,11 +545,14 @@ async def edit_back(callback: CallbackQuery):
 async def edit_settings(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     user_id = callback.from_user.id
-    image = Image.open(f"prints/{user_id}.png")
+    bg_deleted = data["bg_deleted"]
+    if bg_deleted[0]:
+        image = Image.open(f"prints/{user_id}_bg_deleted.png")
+    else:
+        image = Image.open(f"prints/{user_id}.png")
     item = data["order_type"]
     color = data["color"]
     print_pos = data["pos"]
-    bg_deleted = data["bg_deleted"]
     angle = data["angle"]
     size = data["size"]
     image1 = image.resize(tuple(size[0]), Image.Resampling.BICUBIC)
