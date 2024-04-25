@@ -99,33 +99,36 @@ async def show_color(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "getting_print")
 async def ask_color(callback: CallbackQuery, state: FSMContext):
     await callback.message.delete()
-    await callback.message.answer(text="Отправьте документ форматов .png или .jpg, который хотели бы вставить")
+    await callback.message.answer(text="Отправьте документ форматов .png, .jpg, .jpeg, который хотели бы вставить")
     await state.set_state(Order.image_sent)
 
 
 @router.message(Order.image_sent, F.document)
 async def getting_image(message: Message, state: FSMContext):
-    document_type = message.document.file_name[-3:]
+    document_type = message.document.file_name
     user_id = message.from_user.id
-    if (document_type == "png") or (document_type == "jpg"):
-        document = await message.bot.download(message.document.file_id)
-        data = await state.get_data()
-        item = data["order_type"]
-        color = data["color"]
-        with Image.open(document) as image:
-            image.save(f"prints/{user_id}.png", "PNG")
-            centre_pos = [(template_sizes.get(item)[0] - image.size[0]) // 2,
-                          (template_sizes.get(item)[1] - image.size[1]) // 2]
-            await state.update_data({"pos": [centre_pos, [-1, -1]], "size": [image.size, image.size], "angle": [0, 0],
-                                     "bg_deleted": [False, False]})
-            template = paste(image, color, centre_pos, item, 0, 0)
-            file = image_to_bytes(template)
-
-        await message.answer_photo(file, reply_markup=confirm_or_setting_keyboard().as_markup())
+    if message.document.file_size > 2000000:
+        await message.answer("Файл слишком велик! Отправьте документ размером менее 2 МБ")
     else:
-        await message.answer(
-            text="Формат документа не .png или .jpg!\nОтправьте документ с желаемым принтом в формате .png или .jpg"
-        )
+        if (document_type[-3:] == "png") or (document_type[-3:] == "jpg") or (document_type[-4:] == "jpeg"):
+            document = await message.bot.download(message.document.file_id)
+            data = await state.get_data()
+            item = data["order_type"]
+            color = data["color"]
+            with Image.open(document) as image:
+                image.save(f"prints/{user_id}.png", "PNG")
+                centre_pos = [(template_sizes.get(item)[0] - image.size[0]) // 2,
+                              (template_sizes.get(item)[1] - image.size[1]) // 2]
+                await state.update_data({"pos": [centre_pos, [-1, -1]], "size": [image.size, image.size], "angle": [0, 0],
+                                         "bg_deleted": [False, False]})
+                template = paste(image, color, centre_pos, item, 0, 0)
+                file = image_to_bytes(template)
+
+            await message.answer_photo(file, reply_markup=confirm_or_setting_keyboard().as_markup())
+        else:
+            await message.answer(
+                text="Формат документа не поддерживается!"
+            )
 
 
 @router.callback_query(F.data == "settings_back")
@@ -153,6 +156,7 @@ async def remove_print_bg(callback: CallbackQuery, state: FSMContext):
     bg_deleted[side] = True
     await state.update_data({"bg_deleted": bg_deleted})
     image = image.resize(tuple(size[side]), Image.Resampling.BICUBIC)
+    image = print_remove_bg(image, user_id)
     template = paste(image, color, print_pos[side], item, side, angle[side], True)
     file = image_to_bytes(template)
     file = InputMediaPhoto(media=file)
