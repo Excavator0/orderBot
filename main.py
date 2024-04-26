@@ -4,7 +4,7 @@ import logging
 from aiogram import Bot, Dispatcher
 from aiogram.types import BotCommand
 
-from handlers import order_handlers, shipping_handlers
+from handlers import order_handlers, shipping_handlers, admin_handlers
 from config import token
 # from aiogram.fsm.storage.redis import RedisStorage, Redis
 
@@ -34,6 +34,7 @@ async def main():
     # Регистриуем роутеры в диспетчере
     dp.include_router(order_handlers.router)
     dp.include_router(shipping_handlers.router)
+    dp.include_router(admin_handlers.router)
 
     bot_commands = [
         BotCommand(command="/start", description="Новый заказ")

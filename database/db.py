@@ -14,7 +14,8 @@ class Database:
                             "country TEXT,"
                             "phone TEXT,"
                             "email TEXT,"
-                            "shipping_type TEXT"
+                            "shipping_type TEXT,"
+                            "status TEXT"
                             ")"
                             )
         self.cursor.execute("CREATE TABLE IF NOT EXISTS orders("
@@ -22,7 +23,9 @@ class Database:
                             "tg_id INTEGER,"
                             "type TEXT,"
                             "size TEXT,"
-                            "color TEXT"
+                            "color TEXT,"
+                            "print_id INTEGER,"
+                            "print_without_bg_id INTEGER"
                             ")"
                             )
         self.cursor.execute("CREATE TABLE IF NOT EXISTS front_print("
@@ -33,7 +36,8 @@ class Database:
                             "width INTEGER,"
                             "height INTEGER,"
                             "bg_deleted BOOLEAN,"
-                            "angle INTEGER"
+                            "angle INTEGER,"
+                            "pic_id INTEGER"
                             ")"
                             )
         self.cursor.execute("CREATE TABLE IF NOT EXISTS back_print("
@@ -44,7 +48,8 @@ class Database:
                             "width INTEGER,"
                             "height INTEGER,"
                             "bg_deleted BOOLEAN,"
-                            "angle INTEGER"
+                            "angle INTEGER,"
+                            "pic_id INTEGER"
                             ")"
                             )
         self.conn.commit()

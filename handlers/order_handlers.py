@@ -37,19 +37,20 @@ class Order(StatesGroup):
     size = State()
     album_id = State()
     chat_id = State()
+    front_id = State()
+    back_id = State()
 
 
 @router.message(Command("start"))
 async def cmd_start(message: Message, state: FSMContext):
-
-    path = "prints/"
-    now = time.time()
-
-    for filename in os.listdir(path):
-        filestamp = os.stat(os.path.join(path, filename)).st_mtime
-        seven_days_ago = now - 7 * 86400
-        if filestamp < seven_days_ago:
-            os.remove(f"{path}/{filename}")
+    # path = "prints/"
+    # now = time.time()
+    #
+    # for filename in os.listdir(path):
+    #     filestamp = os.stat(os.path.join(path, filename)).st_mtime
+    #     seven_days_ago = now - 7 * 86400
+    #     if filestamp < seven_days_ago:
+    #         os.remove(f"{path}/{filename}")
 
     chat_id = message.chat.id
     await message.answer(
@@ -134,16 +135,23 @@ async def getting_image(message: Message, state: FSMContext):
                 image.save(f"prints/{user_id}.png", "PNG")
                 centre_pos = [(template_sizes.get(item)[0] - image.size[0]) // 2,
                               (template_sizes.get(item)[1] - image.size[1]) // 2]
-                await state.update_data({"pos": [centre_pos, [-1, -1]], "size": [image.size, image.size], "angle": [0, 0],
-                                         "bg_deleted": [False, False]})
+                await state.update_data(
+                    {"pos": [centre_pos, [-1, -1]], "size": [image.size, image.size], "angle": [0, 0],
+                     "bg_deleted": [False, False]})
                 template = paste(image, color, centre_pos, item, 0, 0)
                 file = image_to_bytes(template)
 
             await message.answer_photo(file, reply_markup=confirm_or_setting_keyboard().as_markup())
+            await state.set_state(Order.pos)
         else:
             await message.answer(
                 text="Формат документа не поддерживается!"
             )
+
+
+@router.message(Order.image_sent, F.photo)
+async def photo_sent(message: Message):
+    await message.answer("Отправьте фото документом, так не потеряется качество изображения")
 
 
 @router.callback_query(F.data == "settings_back")
@@ -473,7 +481,9 @@ async def confirm_print(callback: CallbackQuery, state: FSMContext):
     except KeyError:
         pass
     media_group = await callback.message.answer_media_group([file1, file2])
-    await state.update_data({"album_id": media_group[0].message_id})
+    front_id = media_group[0].photo[-1].file_id
+    back_id = media_group[1].photo[-1].file_id
+    await state.update_data({"album_id": media_group[0].message_id, "front_id": front_id, "back_id": back_id})
     await callback.message.answer(
         text=f"Ваш заказ: \n{order_type} \nЦвет {color_name} \nРазмер {size_order.upper()} "
              f"\nПерейти к оплате?", reply_markup=checkout_or_edit_keyboard().as_markup())

@@ -1,3 +1,5 @@
+import os
+
 from PIL import Image
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, ShippingOption, ShippingQuery, LabeledPrice, PreCheckoutQuery, CallbackQuery, \
@@ -12,7 +14,7 @@ from config import PAYMENTS_TOKEN, ADMIN_ID
 router = Router()
 
 colors = {(20, 20, 20): "Чёрный", (232, 232, 232): "Белый", (176, 37, 37): "Красный", (224, 208, 58): "Жёлтый",
-          (24, 54, 122): "Синий", "magenta": "Фиолетовый"}
+          (24, 54, 122): "Синий", (104, 31, 135): "Фиолетовый"}
 shipping_types = {"superspeed": "Супер быстрая", "post": "Почта Росии", "pickup": "Самовывоз"}
 
 PRICES = [
@@ -102,7 +104,6 @@ async def checkout_process(pre_checkout_query: PreCheckoutQuery):
 async def successful_payment(message: Message, state: FSMContext):
     data = await state.get_data()
     user_id = message.from_user.id
-    image = Image.open(f"prints/{user_id}.png")
     item = data["order_type"]
     color = data["color"]
     print_pos = data["pos"]
@@ -110,25 +111,14 @@ async def successful_payment(message: Message, state: FSMContext):
     angle = data["angle"]
     size = data["size"]
     size_order = data["order_size"]
-
+    front_id = data["front_id"]
+    back_id = data["back_id"]
     await message.answer(
         MESSAGES[item]['successful_payment'].format(total_amount=message.successful_payment.total_amount // 100,
                                                     currency=message.successful_payment.currency)
     )
     await state.clear()
     # отправка админу
-    image1 = image.resize(tuple(size[0]), Image.Resampling.BICUBIC)
-    front = paste(image1, color, print_pos[0], item, 0, angle[0], bg_deleted[0])
-    file1 = image_to_bytes(front)
-    file1 = InputMediaPhoto(media=file1)
-
-    if print_pos[1][0] == -1:
-        print_pos[1] = "deleted"
-
-    image2 = image.resize(tuple(size[1]), Image.Resampling.BICUBIC)
-    back = paste(image2, color, print_pos[1], item, 1, angle[1], bg_deleted[1])
-    file2 = image_to_bytes(back)
-    file2 = InputMediaPhoto(media=file2)
     await message.bot.send_message(chat_id=ADMIN_ID, text=f"Новый заказ!\n{PRICES[0].label}\nЦвет {colors.get(color)}\n"
                                                           f"Размер: {size_order.upper()}\n"
                                                           f"Адрес: {message.successful_payment.order_info.shipping_address.state}, "
@@ -140,18 +130,74 @@ async def successful_payment(message: Message, state: FSMContext):
                                                           f"Номер телефона заказчика: {message.successful_payment.order_info.phone_number}\n"
                                                           f"Сумма {message.successful_payment.total_amount // 100} {message.successful_payment.currency}"
                                    )
+    file1 = InputMediaPhoto(media=front_id)
+    file2 = InputMediaPhoto(media=back_id)
+
     await message.bot.send_media_group(chat_id=ADMIN_ID, media=[file1, file2])
-    file = image_to_bytes(image)
-    await message.bot.send_document(chat_id=ADMIN_ID, document=file)
+
+    print_id = -1
+    print_without_bg_id = -1
+    if bg_deleted[0] and bg_deleted[1]:
+        if print_pos[0] != "deleted" or print_pos[1] != "deleted":
+            image = Image.open(f"prints/{user_id}_bg_deleted.png")
+            file = image_to_bytes(image)
+            doc = await message.bot.send_document(chat_id=ADMIN_ID, document=file)
+            print_without_bg_id = doc.document.file_id
+        os.remove(f"prints/{user_id}_bg_deleted.png")
+    elif bg_deleted[0] or bg_deleted[1]:
+        if print_pos[0] == "deleted":
+            if print_pos[1] == "deleted":
+                pass
+            else:
+                if bg_deleted[1]:
+                    image = Image.open(f"prints/{user_id}_bg_deleted.png")
+                    file = image_to_bytes(image)
+                    doc = await message.bot.send_document(chat_id=ADMIN_ID, document=file)
+                    print_without_bg_id = doc.document.file_id
+                else:
+                    image = Image.open(f"prints/{user_id}.png")
+                    file = image_to_bytes(image)
+                    doc = await message.bot.send_document(chat_id=ADMIN_ID, document=file)
+                    print_id = doc.document.file_id
+        else:
+            if print_pos[1] == "deleted":
+                if bg_deleted[0]:
+                    image = Image.open(f"prints/{user_id}_bg_deleted.png")
+                    file = image_to_bytes(image)
+                    doc = await message.bot.send_document(chat_id=ADMIN_ID, document=file)
+                    print_without_bg_id = doc.document.file_id
+                else:
+                    image = Image.open(f"prints/{user_id}.png")
+                    file = image_to_bytes(image)
+                    doc = await message.bot.send_document(chat_id=ADMIN_ID, document=file)
+                    print_id = doc.document.file_id
+            else:
+                image = Image.open(f"prints/{user_id}_bg_deleted.png")
+                file = image_to_bytes(image)
+                doc = await message.bot.send_document(chat_id=ADMIN_ID, document=file)
+                print_without_bg_id = doc.document.file_id
+                image = Image.open(f"prints/{user_id}.png")
+                file = image_to_bytes(image)
+                doc = await message.bot.send_document(chat_id=ADMIN_ID, document=file)
+                print_id = doc.document.file_id
+        os.remove(f"prints/{user_id}_bg_deleted.png")
+        os.remove(f"prints/{user_id}.png")
+    else:
+        if print_pos[0] != "deleted" or print_pos[1] != "deleted":
+            image = Image.open(f"prints/{user_id}.png")
+            file = image_to_bytes(image)
+            doc = await message.bot.send_document(chat_id=ADMIN_ID, document=file)
+            print_id = doc.document.file_id
+            os.remove(f"prints/{user_id}.png")
     # запись в бд
     if print_pos[0] == "deleted":
         print_pos[0] = [-1, -1]
     if print_pos[1] == "deleted":
         print_pos[1] = [-1, -1]
     db = Database("database/example.db")
-    db.cursor.execute("INSERT INTO users (tg_id, name, address, city, country, phone, email, shipping_type) "
-                      "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                      (user_id, message.successful_payment.order_info.name,
+    db.cursor.execute("INSERT INTO users (tg_id, name, address, city, country, phone, email, shipping_type, status) "
+                      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                      (user_id, message.from_user.full_name,
                        message.successful_payment.order_info.shipping_address.street_line1 + ", " +
                        message.successful_payment.order_info.shipping_address.street_line2,
                        message.successful_payment.order_info.shipping_address.state + ", " +
@@ -159,15 +205,16 @@ async def successful_payment(message: Message, state: FSMContext):
                        message.successful_payment.order_info.shipping_address.country_code,
                        message.successful_payment.order_info.phone_number,
                        message.successful_payment.order_info.email,
-                       message.successful_payment.shipping_option_id))
-    db.cursor.execute("INSERT INTO orders (tg_id, type, size, color) "
-                      "VALUES (?, ?, ?, ?)", (user_id, item, size_order.upper(), colors.get(color)))
-    db.cursor.execute("INSERT INTO front_print (tg_id, position_x, position_y, width, height, bg_deleted, angle) "
-                      "VALUES (?, ?, ?, ?, ?, ?, ?)", (user_id, print_pos[0][0], print_pos[0][1], size[0][0], size[0][1],
-                                                       bg_deleted[0], angle[0]))
+                       message.successful_payment.shipping_option_id,
+                       "Оплачен"))
+    db.cursor.execute("INSERT INTO orders (tg_id, type, size, color, print_id, print_without_bg_id) "
+                      "VALUES (?, ?, ?, ?, ?, ?)", (user_id, item, size_order.upper(), colors.get(color), print_id, print_without_bg_id))
+    db.cursor.execute("INSERT INTO front_print (tg_id, position_x, position_y, width, height, bg_deleted, angle, pic_id) "
+                      "VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (user_id, print_pos[0][0], print_pos[0][1], size[0][0], size[0][1],
+                                                       bg_deleted[0], angle[0], front_id))
 
-    db.cursor.execute("INSERT INTO back_print (tg_id, position_x, position_y, width, height, bg_deleted, angle) "
-                      "VALUES (?, ?, ?, ?, ?, ?, ?)", (user_id, print_pos[1][0], print_pos[1][1], size[1][0], size[1][1],
-                                                       bg_deleted[1], angle[1]))
+    db.cursor.execute("INSERT INTO back_print (tg_id, position_x, position_y, width, height, bg_deleted, angle, pic_id) "
+                      "VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (user_id, print_pos[1][0], print_pos[1][1], size[1][0], size[1][1],
+                                                       bg_deleted[1], angle[1], back_id))
     db.conn.commit()
     db.close()
