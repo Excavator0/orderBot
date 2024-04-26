@@ -70,13 +70,32 @@ async def get_details(message: Message, state: FSMContext):
         await message.answer_media_group([file1, file2])
 
         bg_deleted = [front_print_row[6], back_print_row[6]]
+        print_pos = [[front_print_row[2], front_print_row[3]], [back_print_row[2], back_print_row[3]]]
+
         if bg_deleted[0] and bg_deleted[1]:
-            await message.answer_document(order_row[6])
+            if print_pos[0][0] != -1 or print_pos[1][0] != -1:
+                await message.answer_document(order_row[6])
         elif bg_deleted[0] or bg_deleted[1]:
-            await message.answer_document(order_row[5])
-            await message.answer_document(order_row[6])
+            if print_pos[0][0] == -1:
+                if print_pos[1][0] == -1:
+                    pass
+                else:
+                    if bg_deleted[1]:
+                        await message.answer_document(order_row[6])
+                    else:
+                        await message.answer_document(order_row[5])
+            else:
+                if print_pos[1][0] == -1:
+                    if bg_deleted[0]:
+                        await message.answer_document(order_row[6])
+                    else:
+                        await message.answer_document(order_row[5])
+                else:
+                    await message.answer_document(order_row[6])
+                    await message.answer_document(order_row[5])
         else:
-            await message.answer_document(order_row[5])
+            if print_pos[0][0] != -1 or print_pos[1][0] != -1:
+                await message.answer_document(order_row[5])
 
         text = "Номер заказа: " + str(row[0]) + "\n"
         text = text + "Имя пользователя: " + row[2] + "\n"
