@@ -93,7 +93,7 @@ def paste(image, color, pos, item, side, angle, bg_deleted=False):
         item = item + "_front"
     else:
         item = item + "_back"
-    template = Image.open(f"templates/{item}.png").convert("RGB")
+    template = Image.open(f"templates/{item}.png").convert("RGBA")
     mask = Image.open(f"templates/masks/mask_{item}.png")
     rgba_color = color + (255,)
     temporary_image = Image.new("RGBA", mask.size, rgba_color)
@@ -102,7 +102,7 @@ def paste(image, color, pos, item, side, angle, bg_deleted=False):
         alpha = template.getchannel('A')
         alpha = ImageOps.invert(alpha)
         # Paste white onto image wherever it is transparent
-        template.paste(color, mask=alpha)
+        template.paste((255, 255, 255), mask=alpha)
     # editing image
     if image is not None:
         if angle != 0:
