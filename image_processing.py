@@ -117,7 +117,7 @@ def paste(image, color, pos, item, side, angle, bg_deleted=False):
     template.paste(temporary_image, (0, 0), mask)
     if item == "bag_front" or item == "bag_back" or item == "cap_back":
         mask = Image.open(f"templates/masks/{item}_hole.png").convert("L")
-        only_color = Image.new("RGBA", mask.size, rgba_color)
+        only_color = Image.new("RGBA", mask.size, (255, 255, 255, 255))
         template.paste(only_color, (0, 0), mask)
     template = change_print_shade(template, item)
     return template
