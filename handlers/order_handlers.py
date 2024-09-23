@@ -3,10 +3,11 @@ import time
 
 from aiogram import Router, F
 from aiogram.exceptions import TelegramBadRequest
-from aiogram.filters import Command
+from aiogram.filters import Command, CommandStart, CommandObject
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.types import Message, CallbackQuery, InputMediaPhoto
+from aiogram.utils.deep_linking import create_start_link
 
 import keyboards.order_keyboards
 from image_processing import *
@@ -16,7 +17,8 @@ from keyboards.print_processing_keyboards import *
 
 router = Router()
 order_types = {"Футболка": "shirt", "Флаг": "flag", "Стакан": "cup", "Рюкзак": "bag", "Кепка": "cap"}
-template_sizes = {"shirt": (1099, 1389), "flag": (1653, 2339), "cup": (1653, 2339), "bag": (1653, 2339), "cap": (1653, 2339)}
+template_sizes = {"shirt": (1099, 1389), "flag": (1653, 2339), "cup": (1653, 2339), "bag": (1653, 2339),
+                  "cap": (1653, 2339)}
 sizes = ["XS", "S", "M", "L", "XL", "2XL", "One size"]
 size_step = 50
 colors = {"black": (20, 20, 20), "white": (232, 232, 232), "red": (176, 37, 37), "yellow": (224, 208, 58),
@@ -41,7 +43,7 @@ class Order(StatesGroup):
     back_id = State()
 
 
-@router.message(Command("start"))
+@router.message(Command("menu"))
 async def cmd_start(message: Message, state: FSMContext):
     # path = "prints/"
     # now = time.time()
@@ -60,6 +62,24 @@ async def cmd_start(message: Message, state: FSMContext):
     )
     await state.update_data({"chat_id": chat_id})
     await state.set_state(Order.order_type)
+
+
+@router.message(CommandStart(deep_link=True))
+async def start_with_link(message: Message, command: CommandObject, state: FSMContext):
+    item = command.args
+    await state.update_data({"order_type": item, "pos": [[-1, -1], [-1, -1]]})
+    await state.update_data({"side": 0})
+    order_type = ""
+    for name, code in order_types.items():
+        if code == item:
+            order_type = name
+    if item == "cap" or item == "cup" or item == "flag" or item == "bag":
+        await message.answer(text=f"Товар: {order_type}\nТеперь, выберите размер изделия",
+                             reply_markup=make_sizes_keyboard([sizes[-1]]).as_markup())
+    else:
+        await message.answer(text=f"Товар: {order_type}\nТеперь, выберите размер изделия",
+                             reply_markup=make_sizes_keyboard(sizes[:-1]).as_markup())
+    await state.set_state(Order.order_size)
 
 
 @router.callback_query(F.data.in_(set(order_types.values())))
