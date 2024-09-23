@@ -66,14 +66,14 @@ def change_print_shade(image, item):
 def calculate_outline(item):
     img = cv2.imread(f"templates/{item}.png")
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    mask = cv2.inRange(gray, 0, 100)
+    mask = cv2.inRange(gray, 0, 20)
 
     contours, _ = cv2.findContours(mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
-    x_threshold = 1457
+    y_threshold = 200
     filtered_contours = []
     for contour in contours:
         # Проверяем, чтобы все точки контура имели x меньше порога
-        if all(point[0][0] <= x_threshold for point in contour):
+        if all(point[0][1] >= y_threshold for point in contour):
             filtered_contours.append(contour)
 
     mask[:] = 0
@@ -93,7 +93,7 @@ def paste(image, color, pos, item, side, angle, bg_deleted=False):
         item = item + "_front"
     else:
         item = item + "_back"
-    template = Image.open(f"templates/{item}.png").convert("RGBA")
+    template = Image.open(f"templates/{item}.png").convert("RGB")
     mask = Image.open(f"templates/masks/mask_{item}.png")
     rgba_color = color + (255,)
     temporary_image = Image.new("RGBA", mask.size, rgba_color)
@@ -143,3 +143,9 @@ def json_to_image(arr):
 def print_remove_bg(image):
     img = rembg.remove(image)
     return img
+
+img = paste(None, (176, 37, 37), (0, 0), "cup", 0, 0)
+img.show()
+
+# mask = calculate_outline("cup_front")
+# mask.save(f"templates/masks/mask_cup_front.png", "PNG")
